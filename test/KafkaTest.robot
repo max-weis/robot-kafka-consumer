@@ -1,42 +1,51 @@
 *** Settings ***
-Library  ConfluentKafkaLibrary
-Library  Collections
-Library  JSONLibrary
+Library     ConfluentKafkaLibrary
+Library     Collections
+Library     JSONLibrary
+
 
 *** Variables ***
-${GROUP_ID}  my-consumer-group
-${SERVER}  localhost
-${PORT}  9093
-${ENABLE_AUTO_COMMIT}  True
-${AUTO_OFFSET_RESET}  latest
-${TOPIC}  todo
+${GROUP_ID}     robot-consumer
+${SERVER}       localhost
+${PORT}         9093
+${TOPIC}        todo
+
 
 *** Test Cases ***
-Test Incoming Messages On Todo Topic
-    [Setup]  Create Consumer  group_id=${GROUP_ID}  server=${SERVER}  port=${PORT}  enable_auto_commit=${ENABLE_AUTO_COMMIT}  auto_offset_reset=${AUTO_OFFSET_RESET}
-    [Teardown]  Close Consumer  ${GROUP_ID}
-    Subscribe Topic  group_id=${GROUP_ID}  topics=${TOPIC}
-    ${message}=  Consume Until  ${GROUP_ID}  Condition Keyword  ${TOPIC}
-    Should Not Be Empty  ${message}
-    Unsubscribe  ${GROUP_ID}
+Teste Todo
+    [Setup]    Create Consumer    group_id=${GROUP_ID}    server=${SERVER}    port=${PORT}    auto_offset_reset=latest
+
+    Subscribe Topic    group_id=${GROUP_ID}    topics=${TOPIC}
+
+    ${message}=    Konsumiere Bis    Todo Gefunden Wurde    ${GROUP_ID}
+    Should Not Be Empty    ${message}
+
+    [Teardown]    Close Consumer    ${GROUP_ID}
+
 
 *** Keywords ***
-Condition Keyword
-    [Arguments]  ${message}
-    ${condition}=  Run Keyword And Return Status  Is Number Greater Than 100   ${message}[id]
-    [Return]  ${condition}
-
-Is Number Greater Than 100
-    [Arguments]  ${number}
-    ${is_greater}=  Evaluate  ${number} > 100
-    [Return]  ${is_greater}
-
-Consume Until
-    [Arguments]  ${group_id}  ${condition_keyword}  ${topic}
+Konsumiere Bis
+    [Documentation]    Das Keyword akzeptiert ein "inner"-Keyword(BEDINGUNG), welches für jede Nachricht aufgerufen wird.
+    ...    Das "inner"-Keyword muss genau ein Parameter annehmen, welcher ein JSON-Objekt ist. Der Konsument muss bereits das Topic konsumieren.
+    [Arguments]    ${BEDINGUNG}    ${group_id}
     WHILE    True
-        ${result}=  Poll  group_id=${group_id}  max_records=1
-        Log To Console        ${result}  stream=STDERR
-        ${condition_met}=  Run Keyword  ${condition_keyword}  ${result[0]}
-        Run Keyword If  ${condition_met}==True  Exit For Loop
+        ${messages}=    Poll    group_id=${group_id}    max_records=1
+
+        ${len}=    Get Length    ${messages}
+        IF    ${len} == 0    CONTINUE
+
+        ${condition_met}=    Run Keyword    ${BEDINGUNG}    ${messages}[0]
+        IF    ${condition_met}==True    RETURN    ${messages[0]}
     END
-    [Return]  ${result[0]}
+    RETURN    ${messages[0]}
+
+Todo Gefunden Wurde
+    [Arguments]    ${message}
+
+    ${json}=    Convert String to JSON    ${message}
+    ${id}=    Get value from JSON    ${json}    $.id
+
+    Log To Console    ${message}    stream=STDERR
+    IF    ${id}[0] < 100    RETURN    ${True}
+
+    RETURN    ${False}
