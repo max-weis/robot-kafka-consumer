@@ -2,20 +2,18 @@
 Library     ConfluentKafkaLibrary
 Library     Collections
 Library     JSONLibrary
+Library     DateTime
 
 
 *** Variables ***
-${GROUP_ID}     robot-consumer
-${SERVER}       localhost
-${PORT}         9093
-${TOPIC}        todo
+${GROUP_ID}             robot-consumer
+${NICHT_ABGELAUFEN}     ${EMPTY}
 
 
 *** Test Cases ***
 Teste Todo
-    [Setup]    Create Consumer    group_id=${GROUP_ID}    server=${SERVER}    port=${PORT}    auto_offset_reset=latest
-
-    Subscribe Topic    group_id=${GROUP_ID}    topics=${TOPIC}
+    [Setup]    Create Consumer    group_id=${GROUP_ID}    server=localhost    port=9093    auto_offset_reset=latest
+    Subscribe Topic    group_id=${GROUP_ID}    topics=todo
 
     ${message}=    Konsumiere Bis    Todo Gefunden Wurde    ${GROUP_ID}
     Should Not Be Empty    ${message}
@@ -25,10 +23,10 @@ Teste Todo
 
 *** Keywords ***
 Konsumiere Bis
-    [Documentation]    Das Keyword akzeptiert ein "inner"-Keyword(BEDINGUNG), welches für jede Nachricht aufgerufen wird.
-    ...    Das "inner"-Keyword muss genau ein Parameter annehmen, welcher ein JSON-Objekt ist. Der Konsument muss bereits das Topic konsumieren.
+    [Timeout]    1 minute
     [Arguments]    ${BEDINGUNG}    ${group_id}
-    WHILE    True
+
+    WHILE    ${True}
         ${messages}=    Poll    group_id=${group_id}    max_records=1
 
         ${len}=    Get Length    ${messages}
@@ -37,7 +35,8 @@ Konsumiere Bis
         ${condition_met}=    Run Keyword    ${BEDINGUNG}    ${messages}[0]
         IF    ${condition_met}==True    RETURN    ${messages[0]}
     END
-    RETURN    ${messages[0]}
+
+    Fail    msg=Die Kafka Message konnte nicht gefunden werden
 
 Todo Gefunden Wurde
     [Arguments]    ${message}
@@ -46,6 +45,6 @@ Todo Gefunden Wurde
     ${id}=    Get value from JSON    ${json}    $.id
 
     Log To Console    ${message}    stream=STDERR
-    IF    ${id}[0] < 100    RETURN    ${True}
+    IF    ${id}[0] == 100    RETURN    ${True}
 
     RETURN    ${False}
